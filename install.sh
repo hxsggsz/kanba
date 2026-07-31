@@ -60,7 +60,8 @@ main() {
   local asset="kanba-${VERSION}-${OS}-${ARCH}.tar.gz"
   local base_url="https://github.com/${REPO}/releases/download/${VERSION}"
   tmp_dir=$(mktemp -d)
-  trap 'rm -rf "$tmp_dir"' EXIT
+  staged_bin=""
+  trap 'rm -f "$staged_bin"; rm -rf "$tmp_dir"' EXIT
 
   echo "Installing kanba ${VERSION} (${OS}/${ARCH})..."
 
@@ -85,8 +86,15 @@ main() {
   tar -xzf "${tmp_dir}/${asset}" -C "$tmp_dir"
 
   mkdir -p "$INSTALL_DIR"
-  mv "${tmp_dir}/kanba-${VERSION}-${OS}-${ARCH}/kanba" "${INSTALL_DIR}/kanba"
-  chmod +x "${INSTALL_DIR}/kanba"
+
+  # Stage the new binary inside INSTALL_DIR itself (not the /tmp-based
+  # mktemp dir) so the final `mv` below is a same-filesystem rename, which
+  # is atomic. A cross-filesystem mv degrades to copy+unlink and can leave
+  # a truncated/corrupt binary in place if interrupted mid-copy.
+  staged_bin=$(mktemp "${INSTALL_DIR}/.kanba.XXXXXX")
+  cp "${tmp_dir}/kanba-${VERSION}-${OS}-${ARCH}/kanba" "$staged_bin"
+  chmod +x "$staged_bin"
+  mv "$staged_bin" "${INSTALL_DIR}/kanba"
 
   echo "Installed kanba ${VERSION} to ${INSTALL_DIR}/kanba"
 

@@ -27,24 +27,18 @@ func expandTabs(s string) string {
 	return b.String()
 }
 
-type ParseState int
-
-const (
-	StateHeader ParseState = iota
-	StateOldPath
-	StateNewPath
-	StateHunk
-	StateLine
-)
-
 const (
 	lineNumBase = 1
 	lineNumNone = 0
 )
 
+// LineParser matches and parses a single line of unified diff output.
+//
+// NOTE: dispatch order matters. See NewUnifiedParser for why metadata
+// parsers must be registered before ContentLineParser.
 type LineParser interface {
 	Match(line string) bool
-	Parse(line string, cur *FileDiff, state *ParseState) error
+	Parse(line string, cur *FileDiff) error
 }
 
 type DiffStartParser struct{}
@@ -53,7 +47,7 @@ func (p *DiffStartParser) Match(line string) bool {
 	return strings.HasPrefix(line, "diff --git")
 }
 
-func (p *DiffStartParser) Parse(line string, cur *FileDiff, _ *ParseState) error {
+func (p *DiffStartParser) Parse(line string, cur *FileDiff) error {
 	parts := strings.SplitN(line, " ", 4)
 	if len(parts) >= 4 {
 		cur.OldPath = strings.TrimPrefix(parts[2], "a/")
@@ -68,7 +62,7 @@ func (p *HunkHeaderParser) Match(line string) bool {
 	return strings.HasPrefix(line, "@@")
 }
 
-func (p *HunkHeaderParser) Parse(line string, cur *FileDiff, _ *ParseState) error {
+func (p *HunkHeaderParser) Parse(line string, cur *FileDiff) error {
 	h, err := parseHunkHeader(line)
 	if err != nil {
 		return fmt.Errorf("parse hunk header: %w", err)
@@ -83,7 +77,7 @@ func (p *ContentLineParser) Match(line string) bool {
 	return len(line) > 0 && (line[0] == ' ' || line[0] == '+' || line[0] == '-' || line[0] == '\\')
 }
 
-func (p *ContentLineParser) Parse(line string, cur *FileDiff, _ *ParseState) error {
+func (p *ContentLineParser) Parse(line string, cur *FileDiff) error {
 	if len(cur.Hunks) == 0 {
 		return nil
 	}
@@ -120,7 +114,7 @@ func (p *MetadataParser) Match(line string) bool {
 	return strings.HasPrefix(line, p.prefix)
 }
 
-func (p *MetadataParser) Parse(line string, cur *FileDiff, _ *ParseState) error {
+func (p *MetadataParser) Parse(line string, cur *FileDiff) error {
 	p.apply(cur)
 	return nil
 }
@@ -150,6 +144,14 @@ type UnifiedParser struct {
 	parsers []LineParser
 }
 
+// NewUnifiedParser builds the parser chain used to parse unified diff output.
+//
+// IMPORTANT: registration order matters. parseEngine.match dispatches to the
+// first LineParser whose Match returns true, so metadata parsers ("--- ",
+// "+++ ", etc.) MUST be registered before ContentLineParser: their prefixes
+// overlap (ContentLineParser matches any line starting with '+' or '-'), so
+// reordering this chain would cause metadata header lines to be misparsed as
+// content lines.
 func NewUnifiedParser() *UnifiedParser {
 	return NewParserBuilder().
 		Add(&DiffStartParser{}).
@@ -175,16 +177,12 @@ type parseEngine struct {
 	parsers []LineParser
 	files   []FileDiff
 	cur     *FileDiff
-	state   ParseState
 	err     error
 }
 
 func (e *parseEngine) feed(line string) {
 	p := e.match(line)
 	if p == nil {
-		if e.cur != nil && e.state == StateLine {
-			e.cur.IsBinary = true
-		}
 		return
 	}
 	if _, ok := p.(*DiffStartParser); ok {
@@ -192,12 +190,11 @@ func (e *parseEngine) feed(line string) {
 			e.files = append(e.files, *e.cur)
 		}
 		e.cur = &FileDiff{}
-		e.state = StateHeader
 	}
 	if e.cur == nil {
 		return
 	}
-	e.err = p.Parse(line, e.cur, &e.state)
+	e.err = p.Parse(line, e.cur)
 }
 
 func (e *parseEngine) match(line string) LineParser {

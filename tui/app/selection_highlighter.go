@@ -20,7 +20,7 @@ func NewSelectionHighlighter(sel *selection.Selection, colWidth int) *SelectionH
 	return &SelectionHighlighter{
 		sel:         sel,
 		colWidth:    colWidth,
-		prefixWidth: diff.LineNumColWidth + 3,
+		prefixWidth: diff.PrefixWidth,
 	}
 }
 
@@ -58,6 +58,10 @@ func (h *SelectionHighlighter) ProcessLine(line string, flatIdx int, theme model
 		return line, ""
 	}
 
+	// NOTE: the actual highlighting logic (highlightColumns) lives in
+	// view.go rather than on SelectionHighlighter itself. This type is
+	// mostly a column-range calculator that delegates rendering; keep
+	// that coupling in mind if either side changes independently.
 	highlighted := highlightColumns(line, startCol, endCol, theme.CursorBg)
 	plainText := extractPlainTextFromRendered(line, startCol, endCol)
 

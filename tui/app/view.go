@@ -18,9 +18,9 @@ import (
 )
 
 func (m *Model) View() tea.View {
-	if !m.copyMsgTill.IsZero() && time.Now().After(m.copyMsgTill) {
-		m.copyMsg = ""
-		m.copyMsgTill = time.Time{}
+	if !m.copyNotice.till.IsZero() && time.Now().After(m.copyNotice.till) {
+		m.copyNotice.msg = ""
+		m.copyNotice.till = time.Time{}
 	}
 
 	v := tea.NewView("")

@@ -30,7 +30,7 @@ func NewStatusBar(fileName string, fileIdx, totalFiles, width int, theme models.
 }
 
 func (s *StatusBar) Render() string {
-	left := fmt.Sprintf(" ▸ %s  •  ↑↓ scroll  •  g/G top/bottom  •  ? help  •  q quit", s.fileName)
+	left := fmt.Sprintf(" ▸ %s  •  ↑/k ↓/j scroll  •  g/G top/bottom  •  ? help  •  q quit", s.fileName)
 	right := ""
 	if s.copyMsg != "" {
 		right = s.copyMsg
@@ -44,12 +44,12 @@ func (s *StatusBar) Render() string {
 		}
 	}
 
-	style := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder(), false, false, true, false).
-		BorderForeground(lipgloss.Color(s.theme.SidebarDir)).
-		BorderBackground(lipgloss.Color(s.theme.SurfaceBg)).
+	style := WithBorder(
+		BgBox(s.theme.SurfaceBg, s.width),
+		s.theme.SidebarDir, s.theme.SurfaceBg,
+		false, false, true, false,
+	).
 		Foreground(lipgloss.Color(s.theme.StatusBarFg)).
-		Background(lipgloss.Color(s.theme.SurfaceBg)).
 		Padding(1, 1)
-	return style.Width(s.width).Render(text)
+	return style.Render(text)
 }

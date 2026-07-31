@@ -13,9 +13,6 @@ func TestNewCoordinator(t *testing.T) {
 	if _, ok := c.state.(IdleState); !ok {
 		t.Errorf("initial state = %T, want IdleState", c.state)
 	}
-	if _, ok := c.strategy.(CharacterStrategy); !ok {
-		t.Errorf("initial strategy = %T, want CharacterStrategy", c.strategy)
-	}
 }
 
 func TestHandleClick_IdleToSelecting(t *testing.T) {
@@ -130,7 +127,7 @@ func TestDoubleClick_Detection(t *testing.T) {
 	}
 }
 
-func TestDoubleClick_UsesWordStrategy(t *testing.T) {
+func TestDoubleClick_UsesWordBoundaries(t *testing.T) {
 	c := NewCoordinator(nil)
 	c.getLineContent = func(line int, panel PanelSide) string {
 		return "hello world"
@@ -141,10 +138,6 @@ func TestDoubleClick_UsesWordStrategy(t *testing.T) {
 
 	// Double-click at position 6 (the 'w' in "world")
 	c.HandleClick(PanelLeft, 0, 6)
-
-	if _, ok := c.strategy.(WordStrategy); !ok {
-		t.Errorf("strategy = %T, want WordStrategy", c.strategy)
-	}
 
 	sel := c.CurrentSelection()
 	if sel == nil {
@@ -194,9 +187,6 @@ func TestClear_ResetsToIdle(t *testing.T) {
 
 	if _, ok := c.state.(IdleState); !ok {
 		t.Errorf("state after Clear = %T, want IdleState", c.state)
-	}
-	if _, ok := c.strategy.(CharacterStrategy); !ok {
-		t.Errorf("strategy after Clear = %T, want CharacterStrategy", c.strategy)
 	}
 }
 

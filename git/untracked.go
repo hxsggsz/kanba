@@ -21,10 +21,10 @@ func (c *LsFilesCommand) Parse(raw string) ([]string, error) {
 	return strings.Split(raw, "\n"), nil
 }
 
-func UntrackedToSideBySideDiff(repoPath, filePath string) SideBySideDiff {
+func UntrackedToSideBySideDiff(repoPath, filePath string) (SideBySideDiff, error) {
 	content, err := os.ReadFile(filepath.Join(repoPath, filePath))
 	if err != nil {
-		return SideBySideDiff{}
+		return SideBySideDiff{}, fmt.Errorf("read untracked file %q: %w", filePath, err)
 	}
 
 	text := strings.TrimRight(string(content), "\n")
@@ -48,9 +48,9 @@ func UntrackedToSideBySideDiff(repoPath, filePath string) SideBySideDiff {
 		NewPath: filePath,
 		Status:  "A",
 		Hunks: []AlignedHunk{{
-		NewStart: 1,
-		Header:   fmt.Sprintf("@@ -0,0 +1,%d @@", len(lines)),
+			NewStart: 1,
+			Header:   fmt.Sprintf("@@ -0,0 +1,%d @@", len(lines)),
 			Lines:    aligned,
 		}},
-	}
+	}, nil
 }

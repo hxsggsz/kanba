@@ -27,7 +27,10 @@ func GitDiffCmd(repoPath string, args []string) tea.Cmd {
 		}
 
 		for _, fp := range untracked {
-			d := git.UntrackedToSideBySideDiff(repoPath, fp)
+			d, err := git.UntrackedToSideBySideDiff(repoPath, fp)
+			if err != nil {
+				continue
+			}
 			if d.NewPath != "" {
 				diffs = append(diffs, d)
 			}

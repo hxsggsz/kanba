@@ -1,7 +1,6 @@
 package widget
 
 import (
-	"strconv"
 	"strings"
 
 	models "kanba/tui/models"
@@ -97,9 +96,7 @@ func (p *Panel) Render(vis int) string {
 	flush()
 
 	var rendered []string
-	borderStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color(p.theme.PanelBg)).
-		Width(p.width)
+	borderStyle := BgBox(p.theme.PanelBg, p.width)
 
 	for _, b := range blocks {
 		content := strings.Join(b.lines, "\n")
@@ -123,17 +120,8 @@ func (p *Panel) renderFileHeader(fl diff.FlatLine, colWidth int) string {
 	var segs []string
 	segs = append(segs, normalStyle.Render(" "+f.NewPath))
 
-	if stats.Added > 0 || stats.Deleted > 0 {
-		segs = append(segs, normalStyle.Render(" ("))
-		var statSegs []string
-		if stats.Added > 0 {
-			statSegs = append(statSegs, addStyle.Render("+"+strconv.Itoa(stats.Added)))
-		}
-		if stats.Deleted > 0 {
-			statSegs = append(statSegs, delStyle.Render("-"+strconv.Itoa(stats.Deleted)))
-		}
-		segs = append(segs, strings.Join(statSegs, normalStyle.Render(", ")))
-		segs = append(segs, normalStyle.Render(")"))
+	if statsStr := RenderStats(stats.Added, stats.Deleted, addStyle, delStyle, normalStyle); statsStr != "" {
+		segs = append(segs, statsStr)
 	}
 
 	text := strings.Join(segs, "")

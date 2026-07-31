@@ -6,17 +6,13 @@ import (
 
 	"kanba/tui/diff"
 	"kanba/tui/models"
-	"kanba/tui/widget"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"kanba/git"
 )
 
 type RightPanelMode struct{}
-
-func (m *RightPanelMode) Type() ModeType { return ModeRightPanel }
 
 func (m *RightPanelMode) Render(model *Model) string {
 	if len(model.flatLines) == 0 {
@@ -28,31 +24,7 @@ func (m *RightPanelMode) Render(model *Model) string {
 	panelWidth := max(model.width-panelBorderWidth, panelMinWidth)
 	content := m.renderSinglePanel(model, panelWidth, contentVis)
 
-	scroll := model.scroller.Scroll()
-	if scroll >= len(model.flatLines) {
-		scroll = max(0, len(model.flatLines)-1)
-	}
-	cursorFileIdx := model.flatLines[scroll].FileIdx
-	f := model.diffs[cursorFileIdx]
-	statusBar := widget.NewStatusBar(f.NewPath, cursorFileIdx, len(model.diffs), model.width, theme, model.statusRightMsg())
-
-	result := fmt.Sprintf("%s\n%s", statusBar.Render(), content)
-	result = lipgloss.NewStyle().
-		Width(model.width).
-		Height(model.height).
-		Background(lipgloss.Color(theme.PanelBg)).
-		Render(result)
-	result = model.themeModal.Overlay(result, theme.SurfaceBg, theme.SidebarSelected, theme.ContextFg)
-
-	if model.helpActive {
-		result = model.helpOverlay(result, theme)
-	}
-
-	return result
-}
-
-func (m *RightPanelMode) HandleInput(model *Model, msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	return model.handleDiffKeys(msg)
+	return renderFrame(model, theme, "", content)
 }
 
 func (m *RightPanelMode) renderSinglePanel(model *Model, width int, vis int) string {

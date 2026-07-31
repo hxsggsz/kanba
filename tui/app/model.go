@@ -41,13 +41,23 @@ type Model struct {
 	modeFactory  *ModeFactory
 	visibleLines int
 
-	copyMsg     string
-	copyMsgTill time.Time
+	copyNotice copyNotice
 
-	version       string
-	updateState   updateState
-	updateVersion string
-	updateErr     string
+	version    string
+	selfUpdate selfUpdate
+}
+
+// copyNotice tracks the transient "copied to clipboard" status-bar message.
+type copyNotice struct {
+	msg  string
+	till time.Time
+}
+
+// selfUpdate tracks the state of the in-place self-update checker/installer.
+type selfUpdate struct {
+	state   updateState
+	version string
+	err     string
 }
 
 type updateState int
@@ -116,19 +126,19 @@ func (m *Model) VisibleLines() int {
 // A transient copy confirmation takes priority over the persistent update
 // notice; the update notice reappears once the copy message expires.
 func (m *Model) statusRightMsg() string {
-	if m.copyMsg != "" {
-		return m.copyMsg
+	if m.copyNotice.msg != "" {
+		return m.copyNotice.msg
 	}
 
-	switch m.updateState {
+	switch m.selfUpdate.state {
 	case updateStateAvailable:
-		return " " + m.updateVersion + " available — press u to update"
+		return " " + m.selfUpdate.version + " available — press u to update"
 	case updateStateUpdating:
 		return " Updating..."
 	case updateStateSucceeded:
-		return " Updated to " + m.updateVersion + " — restart kanba to apply"
+		return " Updated to " + m.selfUpdate.version + " — restart kanba to apply"
 	case updateStateFailed:
-		return " Update failed: " + m.updateErr
+		return " Update failed: " + m.selfUpdate.err
 	default:
 		return ""
 	}

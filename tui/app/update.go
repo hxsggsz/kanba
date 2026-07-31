@@ -34,17 +34,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case setting.UpdateCheckMsg:
 		if msg.Available {
-			m.updateState = updateStateAvailable
-			m.updateVersion = msg.Version
+			m.selfUpdate.state = updateStateAvailable
+			m.selfUpdate.version = msg.Version
 		}
 		return m, nil
 
 	case setting.UpdateInstallMsg:
 		if msg.Err != nil {
-			m.updateState = updateStateFailed
-			m.updateErr = msg.Err.Error()
+			m.selfUpdate.state = updateStateFailed
+			m.selfUpdate.err = msg.Err.Error()
 		} else {
-			m.updateState = updateStateSucceeded
+			m.selfUpdate.state = updateStateSucceeded
 		}
 		return m, nil
 
@@ -97,11 +97,6 @@ func (m *Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.themeModal.Active {
-		switch msg.String() {
-		case setting.KeyQuit, setting.KeyQuitAlt:
-			m.themeModal.Close()
-			return m, nil
-		}
 		return m.handleThemeModalKeys(msg)
 	}
 
@@ -121,21 +116,28 @@ func (m *Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.activeMode != nil {
-		return m.activeMode.HandleInput(m, msg)
+		return m.handleDiffKeys(msg)
 	}
 
 	return m, nil
 }
 
 func (m *Model) handleUpdateKey() (tea.Model, tea.Cmd) {
-	switch m.updateState {
+	switch m.selfUpdate.state {
 	case updateStateAvailable, updateStateFailed:
-		m.updateState = updateStateUpdating
-		m.updateErr = ""
+		m.selfUpdate.state = updateStateUpdating
+		m.selfUpdate.err = ""
 		return m, setting.UpdateInstallCmd()
 	default:
 		return m, nil
 	}
+}
+
+// overlayActive reports whether a modal overlay (theme selector or help) is
+// currently capturing input, in which case normal key/mouse handling for the
+// diff view should be suppressed.
+func (m *Model) overlayActive() bool {
+	return m.themeModal.Active || m.helpActive
 }
 
 func (m *Model) handleDiffKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -201,8 +203,8 @@ func (m *Model) handleDiffKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if err := selection.CopyToClipboard(path); err != nil {
 			slog.Warn("failed to copy path to clipboard", "error", err)
 		}
-		m.copyMsg = " ✓ " + path
-		m.copyMsgTill = time.Now().Add(3 * time.Second)
+		m.copyNotice.msg = " ✓ " + path
+		m.copyNotice.till = time.Now().Add(3 * time.Second)
 		return m, nil
 	}
 
@@ -241,6 +243,9 @@ func (m *Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 		case tea.MouseWheelDown:
 			m.themeModal.MoveDown()
 		}
+		return m, nil
+	}
+	if m.helpActive {
 		return m, nil
 	}
 
@@ -315,89 +320,132 @@ func (m *Model) handleThemeModalKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleMouseClick dispatches a click to the modal overlay, sidebar, or
+// diff content, depending on where it landed and what's currently active.
 func (m *Model) handleMouseClick(msg tea.MouseClickMsg) *Model {
 	if len(m.flatLines) == 0 {
 		return m
 	}
-	x, y := msg.X, msg.Y
 
 	if m.themeModal.Active {
-		theme := m.CurrentTheme()
-
-		fg := m.themeModal.Render(theme.SurfaceBg, theme.SidebarSelected, theme.ContextFg)
-		fgWidth, fgHeight := lipgloss.Size(fg)
-		modalX := max(0, (m.width-fgWidth)/2)
-		modalY := max(0, (m.height-fgHeight)/2)
-
-		if x >= modalX && x < modalX+fgWidth && y >= modalY && y < modalY+fgHeight {
-			relY := y - modalY
-			n := m.themeModal.VisibleCount()
-			start := models.ListStartLine
-			if relY >= start && relY < start+n {
-				idx := m.themeModal.ScrollOffset + relY - start
-				m.themeModal.Cursor = idx
-				m.themeModal.Select()
-				m.themeModal.SyncCursor(m.themeModal.Selected)
-			}
-		} else {
-			m.themeModal.Close()
-		}
-		return m
+		return m.handleThemeModalClick(msg)
 	}
 
 	if m.helpActive {
-		theme := m.CurrentTheme()
+		return m.handleHelpOverlayClick(msg)
+	}
 
-		fg := m.helpContent(theme)
-		fgWidth, fgHeight := lipgloss.Size(fg)
-		modalX := max(0, (m.width-fgWidth)/2)
-		modalY := max(0, m.height/2-fgHeight/2)
-
-		if !(x >= modalX && x < modalX+fgWidth && y >= modalY && y < modalY+fgHeight) {
-			m.helpActive = false
-		}
+	if msg.Y < statusBarHeight {
 		return m
 	}
 
-	if y < statusBarHeight {
-		return m
-	}
-
-	contentY := y - statusBarHeight
 	sideWidth := widget.CalculateSideWidth(m.width)
+	if msg.X < sideWidth {
+		return m.handleSidebarClick(msg)
+	}
 
-	if x < sideWidth {
-		fileIdx, ok := widget.LookupSidebarEntry(m.diffs, m.flatLines[m.scroller.Scroll()].FileIdx, m.height, contentY)
-		if !ok {
+	return m.handleContentClick(msg)
+}
+
+// handleThemeModalClick routes a click while the theme modal is open: a
+// click on a list row selects it, a click outside the modal closes it.
+func (m *Model) handleThemeModalClick(msg tea.MouseClickMsg) *Model {
+	x, y := msg.X, msg.Y
+	theme := m.CurrentTheme()
+
+	fg := m.themeModal.Render(theme.SurfaceBg, theme.SidebarSelected, theme.ContextFg)
+	fgWidth, fgHeight := lipgloss.Size(fg)
+	modalX := max(0, (m.width-fgWidth)/2)
+	modalY := max(0, (m.height-fgHeight)/2)
+
+	if x >= modalX && x < modalX+fgWidth && y >= modalY && y < modalY+fgHeight {
+		relY := y - modalY
+		n := m.themeModal.VisibleCount()
+		start := models.ListStartLine
+		if relY >= start && relY < start+n {
+			idx := m.themeModal.ScrollOffset + relY - start
+			m.themeModal.Cursor = idx
+			m.themeModal.Select()
+			m.themeModal.SyncCursor(m.themeModal.Selected)
+		}
+	} else {
+		m.themeModal.Close()
+	}
+	return m
+}
+
+// handleHelpOverlayClick closes the help overlay when the click lands
+// outside of it; clicks inside are ignored.
+func (m *Model) handleHelpOverlayClick(msg tea.MouseClickMsg) *Model {
+	x, y := msg.X, msg.Y
+	theme := m.CurrentTheme()
+
+	fg := m.helpContent(theme)
+	fgWidth, fgHeight := lipgloss.Size(fg)
+	modalX := max(0, (m.width-fgWidth)/2)
+	modalY := max(0, m.height/2-fgHeight/2)
+
+	if !(x >= modalX && x < modalX+fgWidth && y >= modalY && y < modalY+fgHeight) {
+		m.helpActive = false
+	}
+	return m
+}
+
+// handleSidebarClick jumps the viewport to the file whose sidebar entry was
+// clicked.
+func (m *Model) handleSidebarClick(msg tea.MouseClickMsg) *Model {
+	contentY := msg.Y - statusBarHeight
+
+	fileIdx, ok := widget.LookupSidebarEntry(m.diffs, m.flatLines[m.scroller.Scroll()].FileIdx, m.height, contentY)
+	if !ok {
+		return m
+	}
+	for i, fl := range m.flatLines {
+		if fl.FileIdx == fileIdx && !fl.IsHeader {
+			m.scroller.SetScroll(i, len(m.flatLines), m.visibleLines)
 			return m
 		}
-		for i, fl := range m.flatLines {
-			if fl.FileIdx == fileIdx && !fl.IsHeader {
-				m.scroller.SetScroll(i, len(m.flatLines), m.visibleLines)
-				return m
-			}
-		}
-		return m
 	}
+	return m
+}
+
+// handleContentClick handles a click inside the diff content area: on a
+// file header it copies the file path, otherwise it either extends the
+// active text selection or jumps the scroll position proportionally
+// (scrollbar-style click).
+func (m *Model) handleContentClick(msg tea.MouseClickMsg) *Model {
+	contentY := msg.Y - statusBarHeight
 
 	panel, line, col := m.mapMouseToContent(msg.X, msg.Y)
 	isClickInContent := panel >= 0
 	if isClickInContent && line < len(m.flatLines) && m.flatLines[line].IsHeader {
-		path := m.diffs[m.flatLines[line].FileIdx].NewPath
-		if err := selection.CopyToClipboard(path); err != nil {
-			slog.Warn("failed to copy path to clipboard", "error", err)
-		}
-		m.copyMsg = " ✓ " + path
-		m.copyMsgTill = time.Now().Add(3 * time.Second)
-		return m
+		return m.copyFileHeaderPath(line)
 	}
 
-	hasSelection := m.selection != nil
-	if isClickInContent && hasSelection {
+	if isClickInContent && m.selection != nil {
 		m.selection.HandleClick(panel, line, col)
 		return m
 	}
 
+	return m.jumpScrollToClick(contentY)
+}
+
+// copyFileHeaderPath copies the file path for the header at flat-line index
+// line to the clipboard and shows a transient status-bar confirmation.
+func (m *Model) copyFileHeaderPath(line int) *Model {
+	path := m.diffs[m.flatLines[line].FileIdx].NewPath
+	if err := selection.CopyToClipboard(path); err != nil {
+		slog.Warn("failed to copy path to clipboard", "error", err)
+	}
+	m.copyNotice.msg = " ✓ " + path
+	m.copyNotice.till = time.Now().Add(3 * time.Second)
+	return m
+}
+
+// jumpScrollToClick treats a click as a scrollbar-proportional jump: the
+// relative vertical position of the click within the content area maps to
+// the corresponding scroll offset.
+func (m *Model) jumpScrollToClick(contentY int) *Model {
 	if m.visibleLines <= 0 {
 		return m
 	}

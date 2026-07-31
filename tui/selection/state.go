@@ -1,12 +1,10 @@
 package selection
 
-import tea "charm.land/bubbletea/v2"
-
 type State interface {
-	HandleClick(s *Coordinator, panel PanelSide, line, col int) State
-	HandleDrag(s *Coordinator, panel PanelSide, line, col int) State
-	HandleRelease(s *Coordinator) (State, tea.Cmd)
-	HandleDoubleClick(s *Coordinator, panel PanelSide, line, col int, boundaries WordBoundary) State
+	HandleClick(panel PanelSide, line, col int) State
+	HandleDrag(panel PanelSide, line, col int) State
+	HandleRelease() State
+	HandleDoubleClick(panel PanelSide, line, col int, boundaries WordBoundary) State
 	Clear() State
 }
 
@@ -15,10 +13,8 @@ type WordBoundary struct {
 	End   int
 }
 
-// IdleState - no selection active
-type IdleState struct{}
-
-func (IdleState) HandleClick(s *Coordinator, panel PanelSide, line, col int) State {
+// newSelecting builds a SelectingState anchored at the given position.
+func newSelecting(panel PanelSide, line, col int) SelectingState {
 	return SelectingState{
 		Selection: Selection{
 			Panel: panel,
@@ -32,26 +28,38 @@ func (IdleState) HandleClick(s *Coordinator, panel PanelSide, line, col int) Sta
 	}
 }
 
-func (IdleState) HandleDrag(s *Coordinator, panel PanelSide, line, col int) State {
-	return IdleState{}
-}
-
-func (IdleState) HandleRelease(s *Coordinator) (State, tea.Cmd) {
-	return IdleState{}, nil
-}
-
-func (IdleState) HandleDoubleClick(s *Coordinator, panel PanelSide, line, col int, boundaries WordBoundary) State {
+// newSelected builds a SelectedState covering the given word boundary.
+func newSelected(panel PanelSide, line int, b WordBoundary) SelectedState {
 	return SelectedState{
 		Selection: Selection{
 			Panel: panel,
 			Range: Range{
 				StartLine: line,
-				StartCol:  boundaries.Start,
+				StartCol:  b.Start,
 				EndLine:   line,
-				EndCol:    boundaries.End,
+				EndCol:    b.End,
 			},
 		},
 	}
+}
+
+// IdleState - no selection active
+type IdleState struct{}
+
+func (IdleState) HandleClick(panel PanelSide, line, col int) State {
+	return newSelecting(panel, line, col)
+}
+
+func (IdleState) HandleDrag(panel PanelSide, line, col int) State {
+	return IdleState{}
+}
+
+func (IdleState) HandleRelease() State {
+	return IdleState{}
+}
+
+func (IdleState) HandleDoubleClick(panel PanelSide, line, col int, boundaries WordBoundary) State {
+	return newSelected(panel, line, boundaries)
 }
 
 func (IdleState) Clear() State {
@@ -63,42 +71,22 @@ type SelectingState struct {
 	Selection Selection
 }
 
-func (SelectingState) HandleClick(s *Coordinator, panel PanelSide, line, col int) State {
-	return SelectingState{
-		Selection: Selection{
-			Panel: panel,
-			Range: Range{
-				StartLine: line,
-				StartCol:  col,
-				EndLine:   line,
-				EndCol:    col,
-			},
-		},
-	}
+func (SelectingState) HandleClick(panel PanelSide, line, col int) State {
+	return newSelecting(panel, line, col)
 }
 
-func (st SelectingState) HandleDrag(s *Coordinator, panel PanelSide, line, col int) State {
+func (st SelectingState) HandleDrag(panel PanelSide, line, col int) State {
 	st.Selection.Range.EndLine = line
 	st.Selection.Range.EndCol = col
 	return st
 }
 
-func (st SelectingState) HandleRelease(s *Coordinator) (State, tea.Cmd) {
-	return SelectedState{Selection: st.Selection}, nil
+func (st SelectingState) HandleRelease() State {
+	return SelectedState{Selection: st.Selection}
 }
 
-func (st SelectingState) HandleDoubleClick(s *Coordinator, panel PanelSide, line, col int, boundaries WordBoundary) State {
-	return SelectedState{
-		Selection: Selection{
-			Panel: panel,
-			Range: Range{
-				StartLine: line,
-				StartCol:  boundaries.Start,
-				EndLine:   line,
-				EndCol:    boundaries.End,
-			},
-		},
-	}
+func (st SelectingState) HandleDoubleClick(panel PanelSide, line, col int, boundaries WordBoundary) State {
+	return newSelected(panel, line, boundaries)
 }
 
 func (st SelectingState) Clear() State {
@@ -110,42 +98,22 @@ type SelectedState struct {
 	Selection Selection
 }
 
-func (SelectedState) HandleClick(s *Coordinator, panel PanelSide, line, col int) State {
-	return SelectingState{
-		Selection: Selection{
-			Panel: panel,
-			Range: Range{
-				StartLine: line,
-				StartCol:  col,
-				EndLine:   line,
-				EndCol:    col,
-			},
-		},
-	}
+func (SelectedState) HandleClick(panel PanelSide, line, col int) State {
+	return newSelecting(panel, line, col)
 }
 
-func (st SelectedState) HandleDrag(s *Coordinator, panel PanelSide, line, col int) State {
+func (st SelectedState) HandleDrag(panel PanelSide, line, col int) State {
 	st.Selection.Range.EndLine = line
 	st.Selection.Range.EndCol = col
 	return st
 }
 
-func (st SelectedState) HandleRelease(s *Coordinator) (State, tea.Cmd) {
-	return st, nil
+func (st SelectedState) HandleRelease() State {
+	return st
 }
 
-func (st SelectedState) HandleDoubleClick(s *Coordinator, panel PanelSide, line, col int, boundaries WordBoundary) State {
-	return SelectedState{
-		Selection: Selection{
-			Panel: panel,
-			Range: Range{
-				StartLine: line,
-				StartCol:  boundaries.Start,
-				EndLine:   line,
-				EndCol:    boundaries.End,
-			},
-		},
-	}
+func (st SelectedState) HandleDoubleClick(panel PanelSide, line, col int, boundaries WordBoundary) State {
+	return newSelected(panel, line, boundaries)
 }
 
 func (st SelectedState) Clear() State {

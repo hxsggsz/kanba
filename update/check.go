@@ -2,6 +2,7 @@ package update
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"kanba/pkg/semver"
@@ -36,6 +37,11 @@ func CheckLatest(ctx context.Context, currentVersion string) (latest string, ava
 			break
 		}
 
+		if isNonRetryable(lastErr) {
+			slog.Debug("update check: permanent error fetching latest release, not retrying", "error", lastErr)
+			return "", false, nil
+		}
+
 		select {
 		case <-time.After(backoffSchedule[attempt]):
 		case <-ctx.Done():
@@ -44,11 +50,13 @@ func CheckLatest(ctx context.Context, currentVersion string) (latest string, ava
 	}
 
 	if lastErr != nil {
+		slog.Debug("update check: giving up after exhausting retries", "error", lastErr, "attempts", maxAttempts)
 		return "", false, nil
 	}
 
 	cmp, err := semver.Compare(tag, currentVersion)
 	if err != nil {
+		slog.Debug("update check: malformed release tag from GitHub", "tag", tag, "error", err)
 		return "", false, nil
 	}
 

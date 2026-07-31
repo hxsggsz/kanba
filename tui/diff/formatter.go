@@ -12,65 +12,70 @@ import (
 	"kanba/git"
 )
 
+// LineNumColWidth is the fixed width reserved for a line-number column.
+// PrefixWidth below encodes the full prefix layout: line number + space +
+// 1-char kind prefix ("+"/"-"/" ") + space, i.e. LineNumColWidth+3.
 const LineNumColWidth = 4
 
-var emptyStyle = lipgloss.NewStyle()
+// PrefixWidth is the single source of truth for how wide the rendered
+// "<linenum> <prefix> " gutter is. Anything that needs to skip past the
+// gutter to reach line content (in this package or elsewhere) must use
+// this constant instead of re-deriving LineNumColWidth+3 independently.
+const PrefixWidth = LineNumColWidth + 3
 
+// LineFormatter describes how a diff line is rendered on each side of the
+// panel. Styling (colors/background) is computed independently in
+// renderStyledLine via theme.BgFor/theme.LineNumFg, not through this
+// interface.
 type LineFormatter interface {
 	LeftContent(ln git.AlignedLine) string
 	RightContent(ln git.AlignedLine) string
 	LeftPrefix(ln git.AlignedLine) string
 	RightPrefix(ln git.AlignedLine) string
-	LeftStyle(ln git.AlignedLine) lipgloss.Style
-	RightStyle(ln git.AlignedLine) lipgloss.Style
 }
 
-type contextFormatter struct{}
+// lineSpec is the data-driven description of how a given git.LineKind is
+// laid out: which side(s) carry content and what single-character prefix
+// each side shows.
+type lineSpec struct {
+	leftHasContent  bool
+	rightHasContent bool
+	leftPrefix      string
+	rightPrefix     string
+}
 
-func (contextFormatter) LeftContent(ln git.AlignedLine) string     { return ln.OldContent }
-func (contextFormatter) RightContent(ln git.AlignedLine) string    { return ln.NewContent }
-func (contextFormatter) LeftPrefix(git.AlignedLine) string         { return " " }
-func (contextFormatter) RightPrefix(git.AlignedLine) string        { return " " }
-func (contextFormatter) LeftStyle(git.AlignedLine) lipgloss.Style  { return emptyStyle }
-func (contextFormatter) RightStyle(git.AlignedLine) lipgloss.Style { return emptyStyle }
+func (s lineSpec) LeftContent(ln git.AlignedLine) string {
+	if !s.leftHasContent {
+		return ""
+	}
+	return ln.OldContent
+}
 
-type addedFormatter struct{}
+func (s lineSpec) RightContent(ln git.AlignedLine) string {
+	if !s.rightHasContent {
+		return ""
+	}
+	return ln.NewContent
+}
 
-func (addedFormatter) LeftContent(git.AlignedLine) string        { return "" }
-func (addedFormatter) RightContent(ln git.AlignedLine) string    { return ln.NewContent }
-func (addedFormatter) LeftPrefix(git.AlignedLine) string         { return " " }
-func (addedFormatter) RightPrefix(git.AlignedLine) string        { return "+" }
-func (addedFormatter) LeftStyle(git.AlignedLine) lipgloss.Style  { return emptyStyle }
-func (addedFormatter) RightStyle(git.AlignedLine) lipgloss.Style { return emptyStyle }
+func (s lineSpec) LeftPrefix(git.AlignedLine) string  { return s.leftPrefix }
+func (s lineSpec) RightPrefix(git.AlignedLine) string { return s.rightPrefix }
 
-type deletedFormatter struct{}
-
-func (deletedFormatter) LeftContent(ln git.AlignedLine) string     { return ln.OldContent }
-func (deletedFormatter) RightContent(git.AlignedLine) string       { return "" }
-func (deletedFormatter) LeftPrefix(git.AlignedLine) string         { return "-" }
-func (deletedFormatter) RightPrefix(git.AlignedLine) string        { return " " }
-func (deletedFormatter) LeftStyle(git.AlignedLine) lipgloss.Style  { return emptyStyle }
-func (deletedFormatter) RightStyle(git.AlignedLine) lipgloss.Style { return emptyStyle }
-
-type modifiedFormatter struct{}
-
-func (modifiedFormatter) LeftContent(ln git.AlignedLine) string     { return ln.OldContent }
-func (modifiedFormatter) RightContent(ln git.AlignedLine) string    { return ln.NewContent }
-func (modifiedFormatter) LeftPrefix(git.AlignedLine) string         { return "-" }
-func (modifiedFormatter) RightPrefix(git.AlignedLine) string        { return "+" }
-func (modifiedFormatter) LeftStyle(git.AlignedLine) lipgloss.Style  { return emptyStyle }
-func (modifiedFormatter) RightStyle(git.AlignedLine) lipgloss.Style { return emptyStyle }
+var lineSpecs = map[git.LineKind]lineSpec{
+	git.KindContext:  {leftHasContent: true, rightHasContent: true, leftPrefix: " ", rightPrefix: " "},
+	git.KindAdded:    {leftHasContent: false, rightHasContent: true, leftPrefix: " ", rightPrefix: "+"},
+	git.KindDeleted:  {leftHasContent: true, rightHasContent: false, leftPrefix: "-", rightPrefix: " "},
+	git.KindModified: {leftHasContent: true, rightHasContent: true, leftPrefix: "-", rightPrefix: "+"},
+}
 
 var DefaultFormatters = NewDefaultFormatters()
 
 func NewDefaultFormatters() map[git.LineKind]LineFormatter {
-	return map[git.LineKind]LineFormatter{
-		git.KindContext:  contextFormatter{},
-		git.KindAdded:    addedFormatter{},
-		git.KindDeleted:  deletedFormatter{},
-		git.KindModified: modifiedFormatter{},
+	formatters := make(map[git.LineKind]LineFormatter, len(lineSpecs))
+	for kind, spec := range lineSpecs {
+		formatters[kind] = spec
 	}
-
+	return formatters
 }
 
 func RenderAlignedLine(f LineFormatter, ln git.AlignedLine, colWidth int, sh *SyntaxHighlighter, filePath string, hScroll int, singlePanel bool, singlePanelLeft bool, theme models.Theme) string {
@@ -86,7 +91,7 @@ func RenderAlignedLine(f LineFormatter, ln git.AlignedLine, colWidth int, sh *Sy
 	leftContent := f.LeftContent(ln)
 	rightContent := f.RightContent(ln)
 
-	contentAreaWidth := colWidth - (LineNumColWidth + 3)
+	contentAreaWidth := colWidth - PrefixWidth
 	if contentAreaWidth < 0 {
 		contentAreaWidth = 0
 	}

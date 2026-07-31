@@ -14,8 +14,7 @@ func TestDiffStartParser(t *testing.T) {
 	}
 
 	cur := &FileDiff{}
-	var state ParseState
-	err := p.Parse("diff --git a/old.go b/new.go", cur, &state)
+	err := p.Parse("diff --git a/old.go b/new.go", cur)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,8 +33,7 @@ func TestHunkHeaderParser(t *testing.T) {
 	}
 
 	cur := &FileDiff{}
-	var state ParseState
-	err := p.Parse("@@ -1,4 +1,5 @@ func foo() {", cur, &state)
+	err := p.Parse("@@ -1,4 +1,5 @@ func foo() {", cur)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,8 +58,7 @@ func TestMetadataParser(t *testing.T) {
 			t.Error("expected match")
 		}
 		cur := &FileDiff{}
-		var state ParseState
-		p.Parse("new file mode 100644", cur, &state)
+		p.Parse("new file mode 100644", cur)
 		if !cur.IsNew || cur.Status != "A" {
 			t.Error("expected IsNew with Status A")
 		}
@@ -72,8 +69,7 @@ func TestMetadataParser(t *testing.T) {
 			f.IsDelete = true; f.Status = "D"
 		})
 		cur := &FileDiff{}
-		var state ParseState
-		p.Parse("deleted file mode 100644", cur, &state)
+		p.Parse("deleted file mode 100644", cur)
 		if !cur.IsDelete || cur.Status != "D" {
 			t.Error("expected IsDelete with Status D")
 		}
@@ -84,8 +80,7 @@ func TestMetadataParser(t *testing.T) {
 			f.IsBinary = true
 		})
 		cur := &FileDiff{}
-		var state ParseState
-		p.Parse("Binary files a/x and b/x differ", cur, &state)
+		p.Parse("Binary files a/x and b/x differ", cur)
 		if !cur.IsBinary {
 			t.Error("expected IsBinary")
 		}
@@ -95,9 +90,8 @@ func TestMetadataParser(t *testing.T) {
 func TestContentLineParser(t *testing.T) {
 	p := &ContentLineParser{}
 	cur := &FileDiff{Hunks: []Hunk{{}}}
-	var state ParseState
 
-	if err := p.Parse(" hello", cur, &state); err != nil {
+	if err := p.Parse(" hello", cur); err != nil {
 		t.Fatal(err)
 	}
 	if len(cur.Hunks[0].Lines) != 1 {
@@ -107,7 +101,7 @@ func TestContentLineParser(t *testing.T) {
 		t.Error("expected context line")
 	}
 
-	if err := p.Parse("+added", cur, &state); err != nil {
+	if err := p.Parse("+added", cur); err != nil {
 		t.Fatal(err)
 	}
 	if len(cur.Hunks[0].Lines) != 2 {
@@ -117,7 +111,7 @@ func TestContentLineParser(t *testing.T) {
 		t.Error("expected added line")
 	}
 
-	if err := p.Parse("-deleted", cur, &state); err != nil {
+	if err := p.Parse("-deleted", cur); err != nil {
 		t.Fatal(err)
 	}
 	if len(cur.Hunks[0].Lines) != 3 {

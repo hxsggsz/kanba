@@ -9,22 +9,20 @@ import (
 // Coordinator manages selection state and mouse event routing.
 type Coordinator struct {
 	state      State
-	strategy   Strategy
 	clickCount int
 	lastClick  time.Time
 	lastX      int
 	lastY      int
 
-	onCopy        func(string) tea.Cmd
+	onCopy         func(string) tea.Cmd
 	getLineContent func(line int, panel PanelSide) string
 }
 
 // NewCoordinator creates a new selection coordinator.
 func NewCoordinator(onCopy func(string) tea.Cmd) *Coordinator {
 	return &Coordinator{
-		state:    IdleState{},
-		strategy: CharacterStrategy{},
-		onCopy:   onCopy,
+		state:  IdleState{},
+		onCopy: onCopy,
 	}
 }
 
@@ -51,7 +49,6 @@ func (c *Coordinator) HandleClick(panel PanelSide, line, col int) tea.Cmd {
 
 	if c.clickCount >= 2 {
 		c.clickCount = 0
-		c.strategy = WordStrategy{}
 
 		var boundary WordBoundary
 		if c.getLineContent != nil {
@@ -62,23 +59,22 @@ func (c *Coordinator) HandleClick(panel PanelSide, line, col int) tea.Cmd {
 			boundary = WordBoundary{Start: col, End: col}
 		}
 
-		c.state = c.state.HandleDoubleClick(c, panel, line, col, boundary)
+		c.state = c.state.HandleDoubleClick(panel, line, col, boundary)
 		return c.copyIfSelected()
 	}
 
-	c.strategy = CharacterStrategy{}
-	c.state = c.state.HandleClick(c, panel, line, col)
+	c.state = c.state.HandleClick(panel, line, col)
 	return nil
 }
 
 // HandleDrag processes mouse drag.
 func (c *Coordinator) HandleDrag(panel PanelSide, line, col int) {
-	c.state = c.state.HandleDrag(c, panel, line, col)
+	c.state = c.state.HandleDrag(panel, line, col)
 }
 
 // HandleRelease processes mouse release.
 func (c *Coordinator) HandleRelease() tea.Cmd {
-	c.state, _ = c.state.HandleRelease(c)
+	c.state = c.state.HandleRelease()
 	return c.copyIfSelected()
 }
 
@@ -93,7 +89,6 @@ func (c *Coordinator) copyIfSelected() tea.Cmd {
 // Clear resets the selection.
 func (c *Coordinator) Clear() {
 	c.state = c.state.Clear()
-	c.strategy = CharacterStrategy{}
 }
 
 // CurrentSelection returns the active selection (if any).

@@ -2,7 +2,6 @@ package widget
 
 import (
 	"path/filepath"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -52,23 +51,7 @@ func NewSidebar(files []git.SideBySideDiff, fileIdx int, width int, height int, 
 
 func (s *Sidebar) Render() string {
 	entries := buildVisualEntries(s.files)
-
-	selPos := 0
-	for i, e := range entries {
-		if !e.isDir && e.fileIdx == s.fileIdx {
-			selPos = i
-			break
-		}
-	}
-
-	start := 0
-	if selPos >= s.maxLines {
-		start = selPos - s.maxLines + 1
-	}
-	visible := entries[start:]
-	if len(visible) > s.maxLines {
-		visible = visible[:s.maxLines]
-	}
+	visible, _ := visibleWindow(entries, s.fileIdx, s.maxLines)
 
 	var sb strings.Builder
 	lineCount := 0
@@ -91,13 +74,12 @@ func (s *Sidebar) Render() string {
 		content += "\n"
 	}
 
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder(), false, true, false, false).
-		BorderForeground(lipgloss.Color(s.theme.SidebarDir)).
-		BorderBackground(lipgloss.Color(s.theme.SurfaceBg)).
-		Background(lipgloss.Color(s.theme.SurfaceBg)).
-		Width(s.width).
-		Render(content)
+	style := WithBorder(
+		BgBox(s.theme.SurfaceBg, s.width),
+		s.theme.SidebarDir, s.theme.SurfaceBg,
+		false, true, false, false,
+	)
+	return style.Render(content)
 }
 
 func (s *Sidebar) ContentHeight() int { return s.contentHeight }
@@ -133,17 +115,7 @@ func (s *Sidebar) renderFile(e visualEntry) string {
 	addStyle := bg.Foreground(lipgloss.Color(s.theme.SidebarAdded))
 	delStyle := bg.Foreground(lipgloss.Color(s.theme.SidebarDeleted))
 
-	var statsSegs []string
-	if st.Added > 0 {
-		statsSegs = append(statsSegs, addStyle.Render("+"+strconv.Itoa(st.Added)))
-	}
-	if st.Deleted > 0 {
-		statsSegs = append(statsSegs, delStyle.Render("-"+strconv.Itoa(st.Deleted)))
-	}
-	var statsStr string
-	if len(statsSegs) > 0 {
-		statsStr = bg.Render(" (") + strings.Join(statsSegs, bg.Render(", ")) + bg.Render(")")
-	}
+	statsStr := RenderStats(st.Added, st.Deleted, addStyle, delStyle, bg)
 	statsW := lipgloss.Width(statsStr)
 
 	if e.fileIdx == s.fileIdx {
@@ -203,9 +175,11 @@ func truncate(s string, maxLen int) string {
 	return string([]rune(s)[:maxLen-3]) + "."
 }
 
-func LookupSidebarEntry(files []git.SideBySideDiff, fileIdx int, height int, y int) (int, bool) {
-	entries := buildVisualEntries(files)
-	maxLines := max(height-statusBarHeight, 1)
+// visibleWindow computes the scroll-window of entries that should be shown
+// on screen: it locates the entry for fileIdx, then clamps the window so
+// that entry is visible within maxLines rows. It returns the visible slice
+// and the index into entries where that slice starts.
+func visibleWindow(entries []visualEntry, fileIdx, maxLines int) (visible []visualEntry, start int) {
 	selPos := 0
 	for i, e := range entries {
 		if !e.isDir && e.fileIdx == fileIdx {
@@ -213,14 +187,21 @@ func LookupSidebarEntry(files []git.SideBySideDiff, fileIdx int, height int, y i
 			break
 		}
 	}
-	start := 0
+	start = 0
 	if selPos >= maxLines {
 		start = selPos - maxLines + 1
 	}
-	visible := entries[start:]
+	visible = entries[start:]
 	if len(visible) > maxLines {
 		visible = visible[:maxLines]
 	}
+	return visible, start
+}
+
+func LookupSidebarEntry(files []git.SideBySideDiff, fileIdx int, height int, y int) (int, bool) {
+	entries := buildVisualEntries(files)
+	maxLines := max(height-statusBarHeight, 1)
+	visible, _ := visibleWindow(entries, fileIdx, maxLines)
 	if y < 0 || y >= len(visible) {
 		return 0, false
 	}
