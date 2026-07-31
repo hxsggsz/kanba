@@ -70,6 +70,8 @@ func (m *RightPanelMode) renderSinglePanel(model *Model, width int, vis int) str
 
 		if fl.IsHeader {
 			lines = append(lines, model.renderFileHeader(fl, width))
+		} else if fl.IsHunkHeader {
+			lines = append(lines, model.renderHunkHeader(fl, width))
 		} else {
 			f := model.diffs[fl.FileIdx]
 			h := f.Hunks[fl.HunkIdx]

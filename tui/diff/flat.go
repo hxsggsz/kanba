@@ -3,10 +3,11 @@ package diff
 import "kanba/git"
 
 type FlatLine struct {
-	IsHeader bool
-	FileIdx  int
-	HunkIdx  int
-	LineIdx  int
+	IsHeader     bool
+	IsHunkHeader bool
+	FileIdx      int
+	HunkIdx      int
+	LineIdx      int
 }
 
 type FileStat struct {
@@ -19,6 +20,9 @@ func BuildFlatLines(diffs []git.SideBySideDiff) []FlatLine {
 	for fi := range diffs {
 		lines = append(lines, FlatLine{IsHeader: true, FileIdx: fi})
 		for hi, h := range diffs[fi].Hunks {
+			if h.OldStart != 0 || h.NewStart != 1 {
+				lines = append(lines, FlatLine{IsHunkHeader: true, FileIdx: fi, HunkIdx: hi})
+			}
 			for li := range h.Lines {
 				lines = append(lines, FlatLine{FileIdx: fi, HunkIdx: hi, LineIdx: li})
 			}

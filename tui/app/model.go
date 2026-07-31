@@ -153,7 +153,7 @@ func (m *Model) setupSelectionProvider() {
 			return ""
 		}
 		fl := m.flatLines[flatLineIdx]
-		if fl.IsHeader {
+		if fl.IsHeader || fl.IsHunkHeader {
 			return ""
 		}
 		f := m.diffs[fl.FileIdx]

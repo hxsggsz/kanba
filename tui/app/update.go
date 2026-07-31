@@ -401,7 +401,7 @@ func (m *Model) handleSidebarClick(msg tea.MouseClickMsg) *Model {
 		return m
 	}
 	for i, fl := range m.flatLines {
-		if fl.FileIdx == fileIdx && !fl.IsHeader {
+		if fl.FileIdx == fileIdx && !fl.IsHeader && !fl.IsHunkHeader {
 			m.scroller.SetScroll(i, len(m.flatLines), m.visibleLines)
 			return m
 		}

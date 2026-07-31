@@ -266,6 +266,11 @@ func parseHunkHeader(rawLine string) (Hunk, error) {
 	if err != nil {
 		return h, fmt.Errorf("parse new position: %w", err)
 	}
+
+	h.Context = strings.TrimSpace(parts[1])
+	if h.Context == "" {
+		h.Context = strings.TrimSpace(parts[0])
+	}
 	return h, nil
 }
 

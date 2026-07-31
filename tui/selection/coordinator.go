@@ -32,6 +32,11 @@ func (c *Coordinator) SetLineContentProvider(fn func(line int, panel PanelSide) 
 	c.getLineContent = fn
 }
 
+// LineContentProvider returns the current line content provider (may be nil).
+func (c *Coordinator) LineContentProvider() func(line int, panel PanelSide) string {
+	return c.getLineContent
+}
+
 // HandleClick processes a mouse click.
 func (c *Coordinator) HandleClick(panel PanelSide, line, col int) tea.Cmd {
 	now := time.Now()

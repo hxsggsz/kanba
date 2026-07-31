@@ -211,6 +211,9 @@ func (m *Model) renderLine(fl diff.FlatLine, width int, hScroll int, selHighligh
 	if fl.IsHeader {
 		return m.renderFileHeader(fl, width)
 	}
+	if fl.IsHunkHeader {
+		return m.renderHunkHeader(fl, width)
+	}
 
 	f := m.diffs[fl.FileIdx]
 	h := f.Hunks[fl.HunkIdx]
@@ -236,6 +239,9 @@ func (m *Model) renderLine(fl diff.FlatLine, width int, hScroll int, selHighligh
 
 func (m *Model) accumulateSelectedText(parts []string, line string, gi int, selHighlighter *SelectionHighlighter, theme models.Theme) []string {
 	if selHighlighter == nil {
+		return parts
+	}
+	if gi >= len(m.flatLines) || m.flatLines[gi].IsHunkHeader {
 		return parts
 	}
 
@@ -344,6 +350,22 @@ func (m *Model) renderFileHeader(fl diff.FlatLine, colWidth int) string {
 			BorderBackground(lipgloss.Color(bgColor))
 	}
 	return style.Render(text)
+}
+
+func (m *Model) renderHunkHeader(fl diff.FlatLine, width int) string {
+	theme := m.CurrentTheme()
+	h := m.diffs[fl.FileIdx].Hunks[fl.HunkIdx]
+	style := lipgloss.NewStyle().
+		Background(lipgloss.Color(theme.LineNumberBg)).
+		Foreground(lipgloss.Color(theme.SidebarDir))
+	styled := style.Render(" ··· " + h.Context)
+	if w := lipgloss.Width(styled); w > width {
+		styled = ansi.Truncate(styled, width, "")
+	}
+	if w := lipgloss.Width(styled); w < width {
+		styled += style.Render(strings.Repeat(" ", width-w))
+	}
+	return styled
 }
 
 func maxFileContentWidth(f git.SideBySideDiff) int {

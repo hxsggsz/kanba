@@ -49,6 +49,30 @@ func TestHunkHeaderParser(t *testing.T) {
 	}
 }
 
+func TestParseHunkHeaderContext(t *testing.T) {
+	tests := []struct {
+		name   string
+		header string
+		want   string
+	}{
+		{"with context", "@@ -13,6 +13,7 @@ func main() {", "func main() {"},
+		{"no context", "@@ -13,6 +13,7 @@", "-13,6 +13,7"},
+		{"new file with context", "@@ -0,0 +1,10 @@ package main", "package main"},
+		{"single-line range", "@@ -1 +1 @@ just a line", "just a line"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h, err := parseHunkHeader(tc.header)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if h.Context != tc.want {
+				t.Errorf("Context = %q, want %q", h.Context, tc.want)
+			}
+		})
+	}
+}
+
 func TestMetadataParser(t *testing.T) {
 	t.Run("new file", func(t *testing.T) {
 		p := NewMetadataParser("new file mode", func(f *FileDiff) {

@@ -24,6 +24,7 @@ type Hunk struct {
 	NewStart int    // starting line number in new file
 	NewCount int    // number of lines in new file
 	Header   string // raw @@ header line
+	Context  string // trailing context (e.g. "func main() {"), or the range when absent
 	Lines    []Line
 }
 

@@ -21,6 +21,7 @@ type AlignedHunk struct {
 	OldStart int
 	NewStart int
 	Header   string
+	Context  string
 	Lines    []AlignedLine
 }
 
@@ -41,7 +42,7 @@ func (a *UnifiedAligner) Align(hunks []Hunk) []AlignedHunk {
 	result := make([]AlignedHunk, len(hunks))
 
 	for i, h := range hunks {
-		ah := AlignedHunk{OldStart: h.OldStart, NewStart: h.NewStart, Header: h.Header}
+		ah := AlignedHunk{OldStart: h.OldStart, NewStart: h.NewStart, Header: h.Header, Context: h.Context}
 		var pending []Line
 
 		for _, ln := range h.Lines {

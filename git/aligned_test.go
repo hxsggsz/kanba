@@ -89,3 +89,19 @@ func TestUnifiedAlignerMixedChanges(t *testing.T) {
 		t.Errorf("line 1: expected old='old' new='new', got old=%q new=%q", result[0].Lines[1].OldContent, result[0].Lines[1].NewContent)
 	}
 }
+
+func TestUnifiedAlignerCopiesContext(t *testing.T) {
+	hunks := []Hunk{{
+		OldStart: 1, OldCount: 2, NewStart: 1, NewCount: 2,
+		Header:  "@@ -1,2 +1,2 @@ func foo() {",
+		Context: "func foo() {",
+		Lines: []Line{
+			{Type: LineContext, OldLineNum: 1, NewLineNum: 1, Content: "stay"},
+		},
+	}}
+	a := &UnifiedAligner{}
+	result := a.Align(hunks)
+	if result[0].Context != "func foo() {" {
+		t.Errorf("expected Context %q, got %q", "func foo() {", result[0].Context)
+	}
+}
